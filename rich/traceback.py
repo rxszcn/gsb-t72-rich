@@ -28,6 +28,7 @@ from pygments.util import ClassNotFound
 
 from . import pretty
 from ._loop import loop_first_last, loop_last
+from .cells import cell_len
 from .columns import Columns
 from .console import (
     Console,
@@ -738,12 +739,19 @@ class Traceback:
                     style="pygments.text",
                 )
                 yield path_highlighter(text)
-        syntax_error_text = highlighter(syntax_error.line.rstrip())
+        syntax_error_line = syntax_error.line.rstrip()
+        syntax_error_text = highlighter(syntax_error_line)
         syntax_error_text.no_wrap = True
-        offset = min(syntax_error.offset - 1, len(syntax_error_text))
-        syntax_error_text.stylize("bold underline", offset, offset)
+        offset = min(max(syntax_error.offset - 1, 0), len(syntax_error_line))
+        # Display column of the offending character: expand tabs and count
+        # cells, since tabs and wide characters (e.g. CJK) do not occupy one
+        # cell per character.
+        caret_spaces = cell_len(syntax_error_line[:offset].expandtabs(8))
+        if offset < len(syntax_error_line) and syntax_error_line[offset] == "\t":
+            caret_spaces += 1
+        syntax_error_text.stylize("bold underline", offset, offset + 1)
         syntax_error_text += Text.from_markup(
-            "\n" + " " * offset + "[traceback.offset]▲[/]",
+            "\n" + " " * caret_spaces + "[traceback.offset]▲[/]",
             style="pygments.text",
         )
         yield syntax_error_text
