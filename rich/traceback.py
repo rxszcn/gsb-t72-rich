@@ -28,6 +28,7 @@ from pygments.util import ClassNotFound
 
 from . import pretty
 from ._loop import loop_first_last, loop_last
+from .cells import cell_len
 from .columns import Columns
 from .console import (
     Console,
@@ -740,10 +741,20 @@ class Traceback:
                 yield path_highlighter(text)
         syntax_error_text = highlighter(syntax_error.line.rstrip())
         syntax_error_text.no_wrap = True
-        offset = min(syntax_error.offset - 1, len(syntax_error_text))
-        syntax_error_text.stylize("bold underline", offset, offset)
+        plain = syntax_error_text.plain
+        # SyntaxError.offset is a character offset; convert it to a display
+        # (cell) column so the caret lines up past tabs and wide characters.
+        offset = min(max(syntax_error.offset - 1, 0), len(plain))
+        tab_size = syntax_error_text.tab_size or 8
+        caret_offset = cell_len(plain[:offset].expandtabs(tab_size))
+        if offset < len(plain) and plain[offset] == "\t":
+            # CPython places the caret just past a tab it points at.
+            caret_offset += 1
+        # Underline the offending character; a zero-length span renders nothing.
+        underline_end = offset + 1 if offset < len(plain) else offset
+        syntax_error_text.stylize("bold underline", offset, underline_end)
         syntax_error_text += Text.from_markup(
-            "\n" + " " * offset + "[traceback.offset]▲[/]",
+            "\n" + " " * caret_offset + "[traceback.offset]▲[/]",
             style="pygments.text",
         )
         yield syntax_error_text
